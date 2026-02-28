@@ -40,13 +40,15 @@ DEFAULT_MODEL    = "tinyllama"
 
 def narrate(state: dict, player_input: dict, mechanical_result: dict,
             model: str = DEFAULT_MODEL, bypass: bool = False,
-            backend: str = DEFAULT_BACKEND, api_key: str = "") -> str:
+            backend: str = DEFAULT_BACKEND, api_key: str = "",
+            world_context: str = "") -> str:
     """
     Send game state + action + mechanical result to the LLM.
     Returns the narrator's prose response as a string.
     bypass=True skips the mechanical result and just narrates freely.
     """
-    prompt = _build_prompt(state, player_input, mechanical_result, bypass)
+    prompt = _build_prompt(state, player_input, mechanical_result,
+                           bypass, world_context)
 
     if backend == "openrouter":
         return _call_openrouter(prompt, model, api_key)
@@ -151,7 +153,8 @@ def _call_openrouter(prompt: str, model: str, api_key: str,
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
 def _build_prompt(state: dict, player_input: dict,
-                  result: dict, bypass: bool) -> str:
+                  result: dict, bypass: bool,
+                  world_context: str = "") -> str:
 
     game_ctx = state_summary(state)
 
@@ -180,7 +183,9 @@ def _build_prompt(state: dict, player_input: dict,
     if state.get("summary"):
         summary_block = f"\n\nEARLIER SESSION SUMMARY:\n{state['summary']}"
 
-    prompt = f"""You are the narrator of a solo tabletop RPG. Your job is to describe what happens next in vivid, atmospheric prose. Keep responses to 2-4 sentences. Do not invent new NPCs or major plot points unprompted. Stay consistent with the game state provided.
+    world_block = f"\n\n{world_context}" if world_context else ""
+
+    prompt = f"""You are the narrator of a solo tabletop RPG. Your job is to describe what happens next in vivid, atmospheric prose. Keep responses to 2-4 sentences. Do not invent new NPCs or major plot points unprompted. Stay consistent with the game state and world bible provided.{world_block}
 
 {game_ctx}{summary_block}
 
