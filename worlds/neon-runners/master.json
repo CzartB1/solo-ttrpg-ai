@@ -1,0 +1,19 @@
+{
+  "title": "Neon Runners",
+  "genre": {
+    "primary": "sci-fi",
+    "tags": [
+      "cyberpunk"
+    ]
+  },
+  "tone": "action, fast-paced, rebellious",
+  "setting": "In 2102, the world is run by an oligarchy of megacorporations. Despite this, there are those who still rebel and fight for their freedom.",
+  "truths": [
+    "In 2102, the world is run by an oligarchic regime of megacooperations. Despite this, there are still those who fight for their freedom through Neon Runners, laborers working as hired hands for ill-gotten businesses.",
+    "The universe holds a rebellious population who fought for independence from the corporate empire and still continue to resist. The struggle for freedom is not just in this year but across timelines as well.",
+    "Megacooperations, which dominate the world's economy, are notorious for their harsh working conditions and exploitative practices. Neon runners, who rely on these laborers for survival, often face dangerous work conditions and live paycheck to paycheck."
+  ],
+  "narrator_voice": "matter-of-factly",
+  "created": "2026-03-01T03:04:41.353731",
+  "last_modified": "2026-03-01T03:04:41.353750"
+}

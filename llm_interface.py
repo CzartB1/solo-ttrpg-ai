@@ -24,7 +24,7 @@ or pass it through the UI.
 
 import requests
 import json
-from game_state import state_summary
+from session_state import session_summary
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -41,14 +41,14 @@ DEFAULT_MODEL    = "tinyllama"
 def narrate(state: dict, player_input: dict, mechanical_result: dict,
             model: str = DEFAULT_MODEL, bypass: bool = False,
             backend: str = DEFAULT_BACKEND, api_key: str = "",
-            world_context: str = "") -> str:
+            world_context: str = "", ghost_suffix: str = "") -> str:
     """
     Send game state + action + mechanical result to the LLM.
-    Returns the narrator's prose response as a string.
+    Returns the narrator's raw response (may include ghost block).
     bypass=True skips the mechanical result and just narrates freely.
     """
     prompt = _build_prompt(state, player_input, mechanical_result,
-                           bypass, world_context)
+                           bypass, world_context, ghost_suffix)
 
     if backend == "openrouter":
         return _call_openrouter(prompt, model, api_key)
@@ -154,9 +154,10 @@ def _call_openrouter(prompt: str, model: str, api_key: str,
 
 def _build_prompt(state: dict, player_input: dict,
                   result: dict, bypass: bool,
-                  world_context: str = "") -> str:
+                  world_context: str = "",
+                  ghost_suffix: str = "") -> str:
 
-    game_ctx = state_summary(state)
+    game_ctx = session_summary(state)
 
     # Describe what the player tried to do
     verb     = player_input.get("verb", "")
@@ -195,7 +196,7 @@ PLAYER ACTION:
 MECHANICAL OUTCOME:
 {mechanic_desc}
 
-Narrate the result in second person ("You..."). Be specific, immersive, and let the mechanical outcome drive the tone — a strong success should feel triumphant, a strong failure should sting:"""
+Narrate the result in second person ("You..."). Be specific, immersive, and let the mechanical outcome drive the tone — a strong success should feel triumphant, a strong failure should sting:{ghost_suffix}"""
 
     return prompt
 
