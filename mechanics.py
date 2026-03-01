@@ -52,6 +52,7 @@ def skill_check(state: dict, skill: str, difficulty: int = 12, modifier: int = 0
         "success":    success,
         "degree":     degree,
         "margin":     margin,
+        "defeated": defeated,
     }
 
 
@@ -61,7 +62,7 @@ def attack(state: dict, target: str, weapon: str = "fist", modifier: int = 0) ->
     Applies damage to the target in game state.
     """
     player    = state["player"]
-    npcs      = state["scene"]["npcs"]
+    npcs = state["scene"].get("npcs_live", {})
     hit_bonus = player["skills"].get("attack", 0)
 
     # Resolve target key (fuzzy: accept partial names)
@@ -78,30 +79,17 @@ def attack(state: dict, target: str, weapon: str = "fist", modifier: int = 0) ->
     hit       = hit_total >= difficulty
 
     # Damage
-    weapon_damage = _weapon_damage(weapon)
-    dmg_rolls  = roll(weapon_damage["sides"], weapon_damage["dice"])
-    dmg_total  = sum(dmg_rolls) + weapon_damage["bonus"]
-
-    status_msg = ""
-    if hit and target_key:
-        status_msg = apply_damage(state, dmg_total, target_key)
-    elif hit:
-        status_msg = f"Hit! {dmg_total} damage dealt."
-
-    return {
-        "type":       "attack",
-        "weapon":     weapon,
-        "target":     target,
-        "target_key": target_key,
-        "hit_roll":   hit_roll,
-        "hit_bonus":  hit_bonus,
-        "hit_total":  hit_total,
-        "difficulty": difficulty,
-        "hit":        hit,
-        "damage":     dmg_total if hit else 0,
-        "dmg_rolls":  dmg_rolls if hit else [],
-        "status":     status_msg,
-    }
+    if hit:
+        sc = state["scene"]
+        live = sc.setdefault("npcs_live", {})
+        if target_key not in live:
+            live[target_key] = {"hp": 10, "disposition": "neutral", "status": "alive"}
+        live[target_key]["hp"] = max(0, live[target_key]["hp"] - dmg_total)
+        defeated = live[target_key]["hp"] <= 0
+        if defeated:
+            live[target_key]["status"] = "defeated"
+        status_msg = (f"{target} defeated!" if defeated
+                    else f"{target} HP: {live[target_key]['hp']}")
 
 
 def stealth_check(state: dict, difficulty: int = 13, modifier: int = 0) -> dict:
@@ -131,7 +119,7 @@ def persuasion_check(state: dict, target: str, approach: str = "neutral",
     result["target"] = target
     result["approach"] = approach
 
-    target_key = _resolve_npc(target, state["scene"]["npcs"])
+    target_key = _resolve_npc(target, state["scene"].get("npcs_live", {}))
     if target_key:
         npc = state["scene"]["npcs"][target_key]
         if result["success"]:
@@ -197,7 +185,7 @@ def examine(state: dict, subject: str) -> dict:
     result["subject"] = subject
 
     # Check if subject is a known NPC
-    target_key = _resolve_npc(subject, state["scene"]["npcs"])
+    target_key = _resolve_npc(subject, state["scene"].get("npcs_live", {}))
     if target_key:
         npc = state["scene"]["npcs"][target_key]
         result["known_info"] = f"{npc['name']}, disposition: {npc['disposition']}, HP: {npc['hp']}"
