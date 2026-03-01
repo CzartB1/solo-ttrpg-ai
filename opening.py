@@ -45,18 +45,25 @@ Background: {player_bio if player_bio else "A traveller with a past."}
 
 Generate a vivid atmospheric opening. Do NOT introduce a plot hook yet — just establish where the player is, what they sense, and the immediate situation.
 
-Return ONLY a valid JSON object with these exact keys:
+Return ONLY a valid JSON object. Here is what each field must contain:
+- location_id: the slug id of the location from the world bible, or "" if you invented it
+- location_name: the display name of the location as a plain string
+- description: 2-3 sentences of atmospheric description of the immediate scene
+- atmosphere: sensory details such as smell, sound, light, and temperature
+- npcs_present: a JSON array of npc id strings (use [] if none)
+- opening_narration: your opening prose, written in second person present tense
+
+Example of the required JSON format (replace all values with your actual content):
 {{
-  "location_id": "slug-of-location or empty string if invented",
-  "location_name": "Name of the location",
-  "description": "2-3 sentence atmospheric description of the immediate scene",
-  "atmosphere": "sensory details — smell, sound, light, temperature",
-  "npcs_present": ["npc-id-1", "npc-id-2"],
-  "opening_narration": "3-5 sentence opening narration in second person present tense"
+  "location_id": "",
+  "location_name": "The Ashen Gate",
+  "description": "A crumbling archway marks the city's eastern boundary. Traders push past without making eye contact.",
+  "atmosphere": "Coal smoke and wet stone. Distant bells toll the hour. The afternoon light is grey and flat.",
+  "npcs_present": [],
+  "opening_narration": "You stand beneath the Ashen Gate as the last traders file past, their carts rattling over uneven cobblestones."
 }}
 
-If inventing a new location not in the world bible, leave location_id as empty string.
-Keep npcs_present as ids from the world bible if known, otherwise use descriptive strings."""
+Do not include any text outside the JSON object. Do not include field descriptions or comments inside the JSON values."""
 
     raw = _call_llm(prompt, model, backend, api_key, max_tokens=500, temperature=0.85)
     data = _parse_json(raw)

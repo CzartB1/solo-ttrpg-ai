@@ -22,6 +22,7 @@ Set your OpenRouter API key in OPENROUTER_API_KEY below,
 or pass it through the UI.
 """
 
+import re
 import requests
 import json
 from session_state import session_summary
@@ -51,9 +52,11 @@ def narrate(state: dict, player_input: dict, mechanical_result: dict,
                            bypass, world_context, ghost_suffix)
 
     if backend == "openrouter":
-        return _call_openrouter(prompt, model, api_key)
+        raw = _call_openrouter(prompt, model, api_key)
     else:
-        return _call_ollama(prompt, model)
+        raw = _call_ollama(prompt, model)
+
+    return _sanitize_narration(raw)
 
 
 def summarize_history(state: dict, model: str = DEFAULT_MODEL,
@@ -159,7 +162,6 @@ def _build_prompt(state: dict, player_input: dict,
 
     game_ctx = session_summary(state)
 
-    # Describe what the player tried to do
     verb     = player_input.get("verb", "")
     subject  = player_input.get("subject", "")
     mods     = player_input.get("modifiers", "")
@@ -173,32 +175,36 @@ def _build_prompt(state: dict, player_input: dict,
     if items:
         action_desc += f" → using: {', '.join(items)}"
 
-    # Describe the mechanical outcome (if any)
     if bypass or not result.get("mechanical"):
         mechanic_desc = "No mechanical resolution — narrate freely based on context."
     else:
         mechanic_desc = _format_result(result)
 
-    # Previous summary if it exists
     summary_block = ""
     if state.get("summary"):
         summary_block = f"\n\nEARLIER SESSION SUMMARY:\n{state['summary']}"
 
     world_block = f"\n\n{world_context}" if world_context else ""
 
-    prompt = f"""You are the narrator of a solo tabletop RPG. Your job is to describe what happens next in vivid, atmospheric prose. Keep responses to 2-4 sentences. Do not invent new NPCs or major plot points unprompted. Stay consistent with the game state and world bible provided.{world_block}
-
-{game_ctx}{summary_block}
-
-PLAYER ACTION:
-{action_desc}
-
-MECHANICAL OUTCOME:
-{mechanic_desc}
-
-Narrate the result in second person ("You..."). Be specific, immersive, and let the mechanical outcome drive the tone — a strong success should feel triumphant, a strong failure should sting:{ghost_suffix}"""
+    # The system instruction is placed as a completed statement BEFORE the
+    # context blocks, not as a list the model might translate or continue.
+    # The prompt ends with a partial sentence the model must finish — this is
+    # the most reliable way to prevent small models from echoing back anything.
+    prompt = (
+        f"[NARRATOR INSTRUCTION: Write 2-4 sentences of immersive second-person "
+        f"prose narration. English only. Do not copy, translate, or continue any "
+        f"text from the context blocks below. Do not write rules, labels, or "
+        f"bullet points. Only the narration itself.]{world_block}\n\n"
+        f"{game_ctx}{summary_block}\n\n"
+        f"ACTION: {action_desc}\n"
+        f"OUTCOME: {mechanic_desc}\n\n"
+        f"The narration begins: You {ghost_suffix}"
+    )
 
     return prompt
+
+
+
 
 
 def _format_result(result: dict) -> str:
@@ -258,3 +264,76 @@ def _format_result(result: dict) -> str:
         return f"Short rest: Recovered {result['hp_gain']} HP. {result['status']}"
 
     return json.dumps(result, indent=2)
+
+
+# ── Output sanitizer ──────────────────────────────────────────────────────────
+
+_LEAK_PATTERNS = [
+    # State block headers and labels
+    r"^=+\s*(GAME STATE|END STATE|WORLD BIBLE|END WORLD BIBLE|WORLD CONTEXT|END WORLD CONTEXT)\s*=+",
+    r"^(Location|Scene|NPCs?|Objects?|Notes?|Player|Bio|Conditions?|Inventory|Gold|Recent history)\s*:",
+    # Stat-style strings like "HP 20/20" or "HP: 20/20"
+    r"\bHP\s*:?\s*\d+\s*/\s*\d+\b",
+    # Mechanical outcome echoes
+    r"^MECHANICAL OUTCOME\s*:",
+    r"^PLAYER ACTION\s*:",
+    r"^Narration\s*:",
+    r"^Continue\s*:",
+    # World bible field echoes
+    r"^(WORLD|TONE|SETTING|TRUTHS?|NARRATOR VOICE)\s*[:\-]",
+    r"^(CHARACTER|LOCATION|FACTION|ITEM|CONCEPT)\s*:",
+    # Turn history echoes
+    r"^Turn\s+\d+\s*:",
+    # Bullet-point world truths (lines starting with * or - that read like lore dumps)
+    r"^\*\s+The (world|setting|age|city|empire|corp|faction)",
+    r"^-\s+The (world|setting|age|city|empire|corp|faction)",
+    # JSON/code fence artifacts
+    r"^```",
+    r"^\{",
+    r"^\}",
+]
+
+_LEAK_RE = re.compile(
+    "|".join(_LEAK_PATTERNS),
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+
+_BANNED_PHRASES = [
+    "=== GAME STATE ===",
+    "=== END STATE ===",
+    "=== WORLD BIBLE ===",
+    "=== END WORLD BIBLE ===",
+    "=== WORLD CONTEXT ===",
+    "=== END WORLD CONTEXT ===",
+    "MECHANICAL OUTCOME:",
+    "PLAYER ACTION:",
+    "EARLIER SESSION SUMMARY:",
+]
+
+
+def _sanitize_narration(text: str) -> str:
+    """
+    Strip leaked prompt/state content from LLM narration output.
+    Operates line-by-line: removes lines that match leak patterns,
+    then removes any banned phrases that slipped through inline.
+    """
+    if not text or text.startswith("[ERROR]"):
+        return text
+
+    # Remove full lines that match leak patterns
+    clean_lines = []
+    for line in text.splitlines():
+        if _LEAK_RE.match(line.strip()):
+            continue
+        clean_lines.append(line)
+
+    cleaned = "\n".join(clean_lines)
+
+    # Remove banned phrases inline
+    for phrase in _BANNED_PHRASES:
+        cleaned = cleaned.replace(phrase, "")
+
+    # Collapse excessive blank lines left behind
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    return cleaned.strip()

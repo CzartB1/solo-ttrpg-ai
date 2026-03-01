@@ -351,22 +351,40 @@ def do_continue(backend, model_name, api_key, temperature, history):
     model_str = model_name.strip() or "tinyllama"
     world_ctx = retrieve_context(_world_slug(), _session, "", [])
 
+    # Keep the prompt compact — small models echo verbose context blocks
+    world_line = ""
+    if _world_slug():
+        from world_bible import load_master
+        master = load_master(_world_slug())
+        title  = master.get("title", "")
+        genre  = master.get("genre", {}).get("primary", "")
+        tone   = master.get("tone", "")
+        world_line = f"World: {title} ({genre}, {tone})\n" if title else ""
+
+    sc = _session["scene"]
+    scene_line = f"Location: {sc.get('location_name', '')}\n" if sc.get("location_name") else ""
+
     prompt = (
-        f"{world_ctx}\n\n"
-        f"{session_summary(_session)}\n\n"
-        f"THE NARRATION SO FAR THIS TURN:\n{last_narration}\n\n"
-        "Continue this narration for 2-3 more sentences. "
-        "Pick up exactly where it left off — do not repeat anything, "
-        "do not add a new paragraph header, just continue the prose."
+        f"You are the narrator of a solo tabletop RPG. "
+        f"Continue the narration below with 2-3 more sentences. "
+        f"Second person, same tone and style. "
+        f"Do not repeat anything already written. "
+        f"No headers, no labels, no meta-commentary. Begin immediately.\n\n"
+        f"{world_line}"
+        f"{scene_line}"
+        f"\nNarration so far:\n{last_narration}\n\n"
+        f"Continue:"
     )
 
-    from llm_interface import _call_ollama, _call_openrouter
+    from llm_interface import _call_ollama, _call_openrouter, _sanitize_narration
     if backend == "openrouter":
         continuation = _call_openrouter(prompt, model_str, api_key,
                                         max_tokens=200, temperature=float(temperature))
     else:
         continuation = _call_ollama(prompt, model_str,
                                     max_tokens=200, temperature=float(temperature))
+
+    continuation = _sanitize_narration(continuation)
 
     clean, new_ghosts = extract_ghosts(continuation)
     for g in new_ghosts:
@@ -379,9 +397,7 @@ def do_continue(backend, model_name, api_key, temperature, history):
         role    = msg.role    if hasattr(msg, 'role')    else msg.get("role", "")
         content = msg.content if hasattr(msg, 'content') else msg.get("content", "")
         if role == "assistant":
-            # content may be a list (multimodal) or a plain string
             if isinstance(content, list):
-                # extract text from the last text-type block, or just append a new one
                 text_parts = [b["text"] if isinstance(b, dict) else b for b in content]
                 merged = " ".join(text_parts) + " " + clean
             else:
@@ -392,7 +408,6 @@ def do_continue(backend, model_name, api_key, temperature, history):
             break
 
     return history
-
 
 def do_retry(backend, model_name, api_key, temperature, history):
     """Regenerate the last narration with the same mechanical result."""
@@ -419,19 +434,15 @@ def do_retry(backend, model_name, api_key, temperature, history):
     for g in new_ghosts:
         add_ghost(_session, g["name"], g["type"], g["context"])
 
-    history = list(history)
-    for i in range(len(history)-1, -1, -1):
-        msg = history[i]
-        role = msg.role if hasattr(msg, 'role') else msg.get("role","")
-        if role == "assistant":
-            history[i] = ChatMessage(role="assistant", content=bot_content)
-            break
+    # Rebuild the display string the same way _run_action does
+    mech_display = _mechanic_display(_last_mechanical)
+    bot_content = (f"{mech_display}\n\n{clean}".strip() if mech_display else clean)
 
     # Replace last assistant message
     history = list(history)
-    for i in range(len(history)-1, -1, -1):
+    for i in range(len(history) - 1, -1, -1):
         msg = history[i]
-        role = msg.role if hasattr(msg, 'role') else msg.get("role","")
+        role = msg.role if hasattr(msg, 'role') else msg.get("role", "")
         if role == "assistant":
             history[i] = ChatMessage(role="assistant", content=bot_content)
             break
