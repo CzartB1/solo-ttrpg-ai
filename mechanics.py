@@ -52,7 +52,6 @@ def skill_check(state: dict, skill: str, difficulty: int = 12, modifier: int = 0
         "success":    success,
         "degree":     degree,
         "margin":     margin,
-        "defeated": defeated,
     }
 
 

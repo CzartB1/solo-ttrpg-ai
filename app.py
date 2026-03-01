@@ -379,8 +379,14 @@ def do_continue(backend, model_name, api_key, temperature, history):
         role    = msg.role    if hasattr(msg, 'role')    else msg.get("role", "")
         content = msg.content if hasattr(msg, 'content') else msg.get("content", "")
         if role == "assistant":
-            history[i] = ChatMessage(role="assistant", content=content + " " + clean)
-            # Update session history narration too
+            # content may be a list (multimodal) or a plain string
+            if isinstance(content, list):
+                # extract text from the last text-type block, or just append a new one
+                text_parts = [b["text"] if isinstance(b, dict) else b for b in content]
+                merged = " ".join(text_parts) + " " + clean
+            else:
+                merged = content + " " + clean
+            history[i] = ChatMessage(role="assistant", content=merged)
             if _session["history"]:
                 _session["history"][-1]["narration"] += " " + clean
             break
@@ -413,9 +419,13 @@ def do_retry(backend, model_name, api_key, temperature, history):
     for g in new_ghosts:
         add_ghost(_session, g["name"], g["type"], g["context"])
 
-    mech_display = _mechanic_display(_last_mechanical)
-    bot_content  = (f"{mech_display}\n\n{clean}".strip()
-                    if mech_display else clean)
+    history = list(history)
+    for i in range(len(history)-1, -1, -1):
+        msg = history[i]
+        role = msg.role if hasattr(msg, 'role') else msg.get("role","")
+        if role == "assistant":
+            history[i] = ChatMessage(role="assistant", content=bot_content)
+            break
 
     # Replace last assistant message
     history = list(history)
