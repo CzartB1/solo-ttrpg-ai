@@ -221,11 +221,11 @@ def _entity_in_bible(world_slug: str, entity_id: str) -> bool:
 # CORE ACTION PIPELINE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _run_action(verb: str, subject: str, modifiers: str, items: list,
-                backend: str, model_name: str, api_key: str,
-                temperature: float, tone_hint: str, length_hint: str,
-                history: list, bypass: bool = False):
-    global _session, _last_mechanical, _last_player_input
+def _run_action(verb, subject, modifiers, items,
+                backend, model_name, api_key,
+                temperature, tone_hint, length_hint,
+                history, bypass=False):
+    global _session, _last_mechanical, _last_player_input, _last_state_changes
 
     if not _session:
         return history, get_status(), gr.update(), get_ghost_md()
@@ -1132,14 +1132,17 @@ with gr.Blocks(title="Solo TTRPG Alpha", css=CSS) as demo:
                 inputs=[ng_world_dd, ng_name_tb, ng_bio_tb, ng_loc_tb,
                         model_tb, backend_radio, api_key_tb],
                 outputs=[chatbot, status_md, ng_msg, items_dd,
-                         ghost_md, new_game_panel],
+                        ghost_md, new_game_panel],
             ).then(
-                fn=lambda: (gr.update(visible=False), gr.update(visible=True)),
-                outputs=[new_game_panel, game_panel],
+                fn=lambda: (gr.update(visible=False), gr.update(visible=True), []),
+                outputs=[new_game_panel, game_panel, chatbot],   # [] clears chat
+            ).then(
+                fn=lambda slug_choice: gr.update(value=slug_choice),
+                inputs=[ng_world_dd],
+                outputs=[world_dd],    # sync sidebar dropdown to match new game world
             ).then(
                 fn=get_gm_scene_md,
                 outputs=[gm_scene_md],
-            )
 
             new_game_btn.click(
                 fn=lambda: (gr.update(visible=True), gr.update(visible=False)),
@@ -1403,7 +1406,7 @@ with gr.Blocks(title="Solo TTRPG Alpha", css=CSS) as demo:
             wb_load_btn.click(
                 fn=do_load_world_tab,
                 inputs=[wb_slug_tb],
-                outputs=[wb_world_msg, world_list_md, ng_world_dd],
+                outputs=[wb_world_msg, world_list_md, world_dd],
             )
             wb_delete_btn.click(
                 fn=do_delete_world_tab,

@@ -186,10 +186,11 @@ def _build_prompt(state: dict, player_input: dict,
 
     world_block = f"\n\n{world_context}" if world_context else ""
 
-    # The system instruction is placed as a completed statement BEFORE the
-    # context blocks, not as a list the model might translate or continue.
-    # The prompt ends with a partial sentence the model must finish — this is
-    # the most reliable way to prevent small models from echoing back anything.
+    # ghost_suffix contains the ghost extraction instructions (multi-line).
+    # It must be separated from the completion cue by a blank line so the
+    # model doesn't try to continue it as part of the narration sentence.
+    ghost_block = f"\n\n{ghost_suffix.strip()}" if ghost_suffix.strip() else ""
+
     prompt = (
         f"[NARRATOR INSTRUCTION: Write 2-4 sentences of immersive second-person "
         f"prose narration. English only. Do not copy, translate, or continue any "
@@ -198,7 +199,7 @@ def _build_prompt(state: dict, player_input: dict,
         f"{game_ctx}{summary_block}\n\n"
         f"ACTION: {action_desc}\n"
         f"OUTCOME: {mechanic_desc}\n\n"
-        f"The narration begins: You {ghost_suffix}"
+        f"The narration begins: You{ghost_block}"
     )
 
     return prompt

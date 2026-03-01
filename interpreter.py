@@ -1,12 +1,6 @@
 """
 interpreter.py
 Maps the hierarchical verb selection to mechanics functions.
-
-VERB_TREE structure:
-  { Category: { Action: { "hint": str, "func": callable } } }
-
-The "hint" is shown in the UI to guide the player on what to fill in.
-The "func" key is resolved at dispatch time to avoid circular imports.
 """
 
 from mechanics import (
@@ -16,7 +10,6 @@ from mechanics import (
 
 
 # ── Verb tree ─────────────────────────────────────────────────────────────────
-# Each leaf has: hint (shown in UI) and a mechanic key (resolved in interpret())
 
 VERB_TREE = {
 
@@ -80,7 +73,6 @@ VERB_TREE = {
 
 }
 
-# Flat list for backward compat if anything needs it
 VERBS = [sub for cat in VERB_TREE.values() for sub in cat.keys()]
 
 
@@ -90,14 +82,23 @@ def interpret(state: dict, verb: str, subject: str = "",
               modifiers: str = "", items: list = None) -> dict:
     """
     Route a verb + args to the correct mechanic function.
-    Returns a result dict with at minimum:
-      type, mechanical (bool)
+    Returns a result dict with at minimum: type, mechanical (bool)
     """
     if items is None:
         items = []
 
     v   = verb.lower().strip()
     mod = _parse_modifier_bonus(modifiers)
+
+    # ── Movement ──────────────────────────────────────────────────────────────
+    # Returns rtype="move" so state_changes._handle_move fires correctly.
+    if v in ("move to", "move", "go to", "go", "travel to", "travel",
+             "walk to", "walk", "run to", "run"):
+        return {
+            "type":        "move",
+            "destination": subject,
+            "mechanical":  True,
+        }
 
     # ── Combat ────────────────────────────────────────────────────────────────
     if v == "attack":
@@ -109,32 +110,32 @@ def interpret(state: dict, verb: str, subject: str = "",
     if v == "disarm":
         result = skill_check(state, "attack",
                              difficulty=_diff(modifiers, 14), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "disarm"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "disarm"
         result["mechanical"] = True
         return result
 
     if v == "grapple":
         result = skill_check(state, "athletics",
                              difficulty=_diff(modifiers, 13), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "grapple"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "grapple"
         result["mechanical"] = True
         return result
 
     if v == "defend":
         result = skill_check(state, "athletics",
                              difficulty=_diff(modifiers, 11), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "defend"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "defend"
         result["mechanical"] = True
         return result
 
     if v == "flee":
         result = skill_check(state, "athletics",
                              difficulty=_diff(modifiers, 12), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "flee"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "flee"
         result["mechanical"] = True
         return result
 
@@ -147,16 +148,16 @@ def interpret(state: dict, verb: str, subject: str = "",
     if v == "pick pocket":
         result = skill_check(state, "stealth",
                              difficulty=_diff(modifiers, 14), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "pick_pocket"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "pick_pocket"
         result["mechanical"] = True
         return result
 
     if v == "tail":
         result = skill_check(state, "stealth",
                              difficulty=_diff(modifiers, 13), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "tail"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "tail"
         result["mechanical"] = True
         return result
 
@@ -170,7 +171,7 @@ def interpret(state: dict, verb: str, subject: str = "",
     if v in ("intimidate", "threaten"):
         result = persuasion_check(state, target=subject, approach="persuasion",
                                   difficulty=_diff(modifiers, 14), modifier=mod)
-        result["flavor"] = "intimidate"
+        result["flavor"]     = "intimidate"
         result["mechanical"] = True
         return result
 
@@ -181,10 +182,9 @@ def interpret(state: dict, verb: str, subject: str = "",
         return result
 
     if v in ("seduce", "flatter", "compliment"):
-        # Seduction/flattery uses charisma-flavored persuasion, slightly harder
         result = persuasion_check(state, target=subject, approach="persuasion",
                                   difficulty=_diff(modifiers, 14), modifier=mod)
-        result["flavor"] = v
+        result["flavor"]     = v
         result["mechanical"] = True
         return result
 
@@ -192,7 +192,7 @@ def interpret(state: dict, verb: str, subject: str = "",
         item = items[0] if items else ""
         result = persuasion_check(state, target=subject, approach="persuasion",
                                   difficulty=_diff(modifiers, 12), modifier=mod)
-        result["flavor"] = "bribe"
+        result["flavor"]     = "bribe"
         result["bribe_item"] = item
         result["mechanical"] = True
         return result
@@ -200,7 +200,7 @@ def interpret(state: dict, verb: str, subject: str = "",
     if v == "negotiate":
         result = persuasion_check(state, target=subject, approach="persuasion",
                                   difficulty=_diff(modifiers, 13), modifier=mod)
-        result["flavor"] = "negotiate"
+        result["flavor"]     = "negotiate"
         result["mechanical"] = True
         return result
 
@@ -213,24 +213,24 @@ def interpret(state: dict, verb: str, subject: str = "",
     if v == "search":
         result = skill_check(state, "perception",
                              difficulty=_diff(modifiers, 12), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "search"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "search"
         result["mechanical"] = True
         return result
 
     if v == "listen":
         result = skill_check(state, "perception",
                              difficulty=_diff(modifiers, 12), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "listen"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "listen"
         result["mechanical"] = True
         return result
 
     if v == "track":
         result = skill_check(state, "perception",
                              difficulty=_diff(modifiers, 14), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "track"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "track"
         result["mechanical"] = True
         return result
 
@@ -239,8 +239,8 @@ def interpret(state: dict, verb: str, subject: str = "",
         diff = 10 if "key" in item.lower() else 14
         result = skill_check(state, "dexterity",
                              difficulty=_diff(modifiers, diff), modifier=mod)
-        result["type"] = "skill_check"
-        result["flavor"] = "unlock"
+        result["type"]       = "skill_check"
+        result["flavor"]     = "unlock"
         result["mechanical"] = True
         return result
 
@@ -251,10 +251,36 @@ def interpret(state: dict, verb: str, subject: str = "",
         result["mechanical"] = True
         return result
 
+    if v == "pick up":
+        item = subject or (items[0] if items else "")
+        result = {
+            "type":      "pick_up",
+            "item":      item,
+            "success":   True,
+            "mechanical": True,
+        }
+        if item and item not in state["player"]["inventory"]:
+            state["player"]["inventory"].append(item)
+        return result
+
+    if v == "drop":
+        item = subject or (items[0] if items else "")
+        result = {
+            "type":      "drop",
+            "item":      item,
+            "mechanical": True,
+        }
+        if item:
+            state["player"]["inventory"] = [
+                i for i in state["player"]["inventory"]
+                if i.lower() != item.lower()
+            ]
+        return result
+
     if v == "give":
         item = items[0] if items else ""
         result = use_item(state, item=item, target=subject)
-        result["flavor"] = "give"
+        result["flavor"]     = "give"
         result["mechanical"] = True
         return result
 
@@ -267,19 +293,16 @@ def interpret(state: dict, verb: str, subject: str = "",
     if v == "tend wounds":
         item = items[0] if items else ""
         result = use_item(state, item=item, target=subject) if item else rest(state)
-        result["flavor"] = "tend_wounds"
+        result["flavor"]     = "tend_wounds"
         result["mechanical"] = True
         return result
 
     # ── Dialogue & narrative-only ─────────────────────────────────────────────
-    # Ask, Tell, Confess, Taunt, Move To, Meditate, Pick Up, Drop, etc.
-    # These are pure narrative — no roll — but a soft perception/charisma
-    # oracle fires behind the scenes to give the LLM a success/fail hint.
     result = skill_check(state, "charisma", difficulty=10, modifier=mod)
-    result["type"] = "narrative"
-    result["verb"] = verb
-    result["mechanical"] = False   # don't show dice in UI
-    result["oracle"] = result["success"]  # whisper a hint to the narrator
+    result["type"]       = "narrative"
+    result["verb"]       = verb
+    result["mechanical"] = False
+    result["oracle"]     = result["success"]
     return result
 
 
